@@ -111,4 +111,12 @@ public class Node {
     	this.winScore = score;
     }
     
+    /**
+     *  Return the latest move
+     * @return
+     */
+    public Move getLatestMove() {
+    	return latestMove;
+    }
+    
 }

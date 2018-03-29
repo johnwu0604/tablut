@@ -1,9 +1,12 @@
 package student_player;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 
 import boardgame.Move;
+import coordinates.Coord;
+import coordinates.Coordinates;
 import tablut.TablutBoardState;
 import tablut.TablutMove;
 import tablut.TablutPlayer;
@@ -14,6 +17,9 @@ public class StudentPlayer extends TablutPlayer {
 	private int level;
 	private int opponent;
 	private int player;
+	private int NUM_PIECES_WEIGHTING = 2;
+	private int KING_DISTANCE_WEIGHTING = 10;
+	private int PIECES_TO_KING_WEIGHTING = 1;
 
     /**
      * You must modify this constructor to return your student number. This is
@@ -45,12 +51,23 @@ public class StudentPlayer extends TablutPlayer {
     	
     	for (int i=0; i<root.getChildren().size(); i++) {
 			if (root.getChildren().get(i).getState().getWinner() == player) {
-				return root.getChildren().get(i).latestMove;
+				return root.getChildren().get(i).getLatestMove();
 			} 
 			if (root.getChildren().get(i).getState().getWinner() == opponent) {
 				root.getChildren().remove(i);
 			}
 		}
+    	
+    	int opponentPieces = root.getState().getNumberPlayerPieces(opponent);
+    	int playerPieces = root.getState().getNumberPlayerPieces(player);
+    	for (int i=0; i<root.getChildren().size(); i++) {
+    		if (opponentPieces-root.getChildren().get(i).getState().getNumberPlayerPieces(opponent) != 0) {
+    			return root.getChildren().get(i).getLatestMove();
+    		}
+    		if (playerPieces-root.getChildren().get(i).getState().getNumberPlayerPieces(player) != 0) {
+    			root.getChildren().remove(i);
+    		}
+    	}
     	
     	long startTime = System.currentTimeMillis();
     	while ( (System.currentTimeMillis()-startTime) < end) {
@@ -63,7 +80,7 @@ public class StudentPlayer extends TablutPlayer {
     		}
         }
         // Return your move to be processed by the server.
-        return getHighestScore(root.getChildren()).latestMove;
+        return getHighestScore(root.getChildren()).getLatestMove();
     }
     
     private Node getHighestScore(List<Node> children) {
@@ -79,7 +96,38 @@ public class StudentPlayer extends TablutPlayer {
     private Node selectPromisingNode(Node rootNode) {
     	Node node = rootNode;
     	node.createChildNodes();
-    	return node.getChildren().get(0);
+    	int bestHeuristic = -1;
+    	Node bestNode = null;
+    	for (Node child: rootNode.getChildren()) {
+    		int heuristic = calculateHeuristic(child.getState());
+    		if (heuristic > bestHeuristic) {
+    			bestNode = child;
+    		}
+    	}
+    	return bestNode;
+    }
+    
+    private int calculateHeuristic(TablutBoardState state) {
+    	int score = 1000;
+    	if (state.gameOver()) {
+    		if (state.getWinner() == player) {
+    			return 10000;
+    		} 
+    		if (state.getWinner() == opponent) {
+    			return 0;
+    		}
+    	}
+    	Coord king = state.getKingPosition(); 
+    	HashSet<Coord> playerPieces = state.getPlayerPieceCoordinates();
+    	HashSet<Coord> opponentPieces = state.getOpponentPieceCoordinates();
+    	score += playerPieces.size();
+    	score -= opponentPieces.size();
+    	if (player == TablutBoardState.SWEDE) {
+    		score -= KING_DISTANCE_WEIGHTING * Coordinates.distanceToClosestCorner(king);
+    	} else {
+    		score += KING_DISTANCE_WEIGHTING * Coordinates.distanceToClosestCorner(king);
+    	}
+    	return score;
     }
     
     private void expandNode(Node node) {
