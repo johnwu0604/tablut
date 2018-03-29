@@ -22,7 +22,7 @@ public class StudentPlayer extends TablutPlayer {
 	private final int NUM_PIECES_WEIGHTING = 2;
 	private final int KING_DISTANCE_WEIGHTING = 50;
 	private final int PIECES_TO_KING_WEIGHTING = 1;
-	private final int MONTE_CARLO_LIMIT = 1000;
+	private final int MONTE_CARLO_LIMIT = 1500;
 
     /**
      * You must modify this constructor to return your student number. This is
@@ -59,8 +59,13 @@ public class StudentPlayer extends TablutPlayer {
     		return winningMove;
     	}
     	
-    	// remove any obvious bad moves
-    	//children = removeBadMoves(children);
+    	// if there is a greedy move to get king closer to corner, make it
+    	if (player == TablutBoardState.SWEDE) {
+    		Move greedyMove = getGreedyMove(root);
+        	if (greedyMove != null) {
+        		return greedyMove;
+        	}
+    	}
     	
     	// if there is an obvious good move, make it
     	Move obviousMove = getObviousMove(children, root);
@@ -116,8 +121,8 @@ public class StudentPlayer extends TablutPlayer {
     			return 0;
     		}
     	}
-    	//int score = 1000;
-    	int score = greedyHeuristic(child);
+    	int score = 1000;
+    	//int score = greedyHeuristic(child);
     	if (score == 0) {
     		return 0;
     	}
@@ -209,6 +214,50 @@ public class StudentPlayer extends TablutPlayer {
     		}
     	}
     	return null;
+    }
+    
+    /**
+     * Determine if greedy move of moving king closer to corner is available
+     * or moving closer to king if on defense
+     * 
+     * @param children
+     * @return
+     */
+    private Move getGreedyMove(Node parent) {
+    	Move bestMove = null;
+    	Coord king = parent.getState().getKingPosition();
+    	int minDistance = Coordinates.distanceToClosestCorner(king);
+        for (TablutMove move : parent.getState().getLegalMovesForPosition(king)) {
+            int moveDistance = Coordinates.distanceToClosestCorner(move.getEndPosition());
+            if (moveDistance < minDistance) {
+            	TablutBoardState childState = (TablutBoardState) parent.getState().clone();
+                childState.processMove(move);
+            	if (isMoveSafe(childState)) {
+            		minDistance = moveDistance;
+                    bestMove = move;
+            	}
+            }
+        }
+        return bestMove;
+    }
+    
+    /**
+     * Determines if a state is safe for at least one turn
+     * 
+     * @param parent
+     * @return
+     */
+    private boolean isMoveSafe(TablutBoardState state) {
+    	int originalNumPieces = state.getNumberPlayerPieces(player);
+    	for (TablutMove move: state.getAllLegalMoves()) {
+    		TablutBoardState childState = (TablutBoardState) state.clone();
+            childState.processMove(move);
+    		int newNumPieces = childState.getNumberPlayerPieces(player);
+    		if (originalNumPieces-newNumPieces != 0) {
+    			return false;
+    		}
+    	}
+    	return true;
     }
    
 }
