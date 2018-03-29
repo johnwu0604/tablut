@@ -1,5 +1,7 @@
 package student_player;
 
+import java.lang.Thread.State;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -17,9 +19,10 @@ public class StudentPlayer extends TablutPlayer {
 	private int level;
 	private int opponent;
 	private int player;
-	private int NUM_PIECES_WEIGHTING = 2;
-	private int KING_DISTANCE_WEIGHTING = 10;
-	private int PIECES_TO_KING_WEIGHTING = 1;
+	private final int NUM_PIECES_WEIGHTING = 2;
+	private final int KING_DISTANCE_WEIGHTING = 50;
+	private final int PIECES_TO_KING_WEIGHTING = 1;
+	private final int MONTE_CARLO_LIMIT = 1000;
 
     /**
      * You must modify this constructor to return your student number. This is
@@ -45,33 +48,29 @@ public class StudentPlayer extends TablutPlayer {
     		opponent = TablutBoardState.SWEDE;
     	}
     	
-    	int end = 1000;
-    	Node root = new Node(null, boardState, player, null);
+    	// create the root node and retrieve its children
+    	Node root = new Node(null, boardState, null);
     	root.createChildNodes();
+    	List<Node> children = root.getChildren(); 
     	
-    	for (int i=0; i<root.getChildren().size(); i++) {
-			if (root.getChildren().get(i).getState().getWinner() == player) {
-				return root.getChildren().get(i).getLatestMove();
-			} 
-			if (root.getChildren().get(i).getState().getWinner() == opponent) {
-				root.getChildren().remove(i);
-			}
-		}
+    	// if there is a winning move, make it
+    	Move winningMove = getWinningMove(children);
+    	if (winningMove != null) {
+    		return winningMove;
+    	}
     	
-    	int opponentPieces = root.getState().getNumberPlayerPieces(opponent);
-    	int playerPieces = root.getState().getNumberPlayerPieces(player);
-    	for (int i=0; i<root.getChildren().size(); i++) {
-    		if (opponentPieces-root.getChildren().get(i).getState().getNumberPlayerPieces(opponent) != 0) {
-    			return root.getChildren().get(i).getLatestMove();
-    		}
-    		if (playerPieces-root.getChildren().get(i).getState().getNumberPlayerPieces(player) != 0) {
-    			root.getChildren().remove(i);
-    		}
+    	// remove any obvious bad moves
+    	//children = removeBadMoves(children);
+    	
+    	// if there is an obvious good move, make it
+    	Move obviousMove = getObviousMove(children, root);
+    	if (obviousMove != null) {
+    		return obviousMove;
     	}
     	
     	long startTime = System.currentTimeMillis();
-    	while ( (System.currentTimeMillis()-startTime) < end) {
-    		for (Node child : root.getChildren()) {
+    	while ( (System.currentTimeMillis()-startTime) < MONTE_CARLO_LIMIT) {
+    		for (Node child : children) {
     			Node promisingNode = selectPromisingNode(child);
     			TablutBoardState playoutResult = simulateRandomPlayout(promisingNode.getState());
     			if (playoutResult.getWinner() == player) {
@@ -80,7 +79,7 @@ public class StudentPlayer extends TablutPlayer {
     		}
         }
         // Return your move to be processed by the server.
-        return getHighestScore(root.getChildren()).getLatestMove();
+        return getHighestScore(children).getLatestMove();
     }
     
     private Node getHighestScore(List<Node> children) {
@@ -99,7 +98,7 @@ public class StudentPlayer extends TablutPlayer {
     	int bestHeuristic = -1;
     	Node bestNode = null;
     	for (Node child: rootNode.getChildren()) {
-    		int heuristic = calculateHeuristic(child.getState());
+    		int heuristic = calculateHeuristic(child);
     		if (heuristic > bestHeuristic) {
     			bestNode = child;
     		}
@@ -107,8 +106,8 @@ public class StudentPlayer extends TablutPlayer {
     	return bestNode;
     }
     
-    private int calculateHeuristic(TablutBoardState state) {
-    	int score = 1000;
+    private int calculateHeuristic(Node child) {
+    	TablutBoardState state = child.getState();
     	if (state.gameOver()) {
     		if (state.getWinner() == player) {
     			return 10000;
@@ -116,6 +115,11 @@ public class StudentPlayer extends TablutPlayer {
     		if (state.getWinner() == opponent) {
     			return 0;
     		}
+    	}
+    	//int score = 1000;
+    	int score = greedyHeuristic(child);
+    	if (score == 0) {
+    		return 0;
     	}
     	Coord king = state.getKingPosition(); 
     	HashSet<Coord> playerPieces = state.getPlayerPieceCoordinates();
@@ -145,6 +149,66 @@ public class StudentPlayer extends TablutPlayer {
         	tempState.processMove(moves.get(rand.nextInt(moves.size())));
         }
         return tempState;
+    }
+    
+    /**
+     * Determines the baseline heuristic purely based on greed
+     * 
+     * @return A heuristic based on how severe it is
+     */
+    private int greedyHeuristic(Node node) {
+    	node.createChildNodes();
+    	List<Node> children = node.getChildren();
+    	int previousNumPieces = node.getState().getNumberPlayerPieces(player);
+    	for (Node child: children) {
+			TablutBoardState state = child.getState();
+			int newNumPieces = child.getState().getNumberPlayerPieces(player);
+			if (state.gameOver()) {
+    			if (state.getWinner() == opponent) {
+    				return 0;
+    			}
+    		} else {
+    			if (previousNumPieces-newNumPieces == 0) {
+    				return 1000;
+    			}
+    		}
+		}
+    	return 100;
+    }
+    
+    /**
+     * Returns the move that leads to a capture if it exists
+     * 
+     * @param children
+     * @param parent
+     * @return
+     */
+    private Move getObviousMove(List<Node> children, Node parent) {
+    	int previousOpponentPieces = parent.getState().getNumberPlayerPieces(opponent);
+    	for (Node child: children) {
+    		int newOpponentPieces = child.getState().getNumberPlayerPieces(opponent);
+    		if (previousOpponentPieces-newOpponentPieces != 0) {
+    			return child.getLatestMove();
+    		}
+    	}
+    	return null;
+    }
+    
+    /**
+     * Returns the winning move if it exists
+     * 
+     * @param children
+     * @param parent
+     * @return
+     */
+    private Move getWinningMove(List<Node> children) {
+    	for (Node child: children) {
+    		TablutBoardState state = child.getState();
+    		if (state.getWinner() == player) {
+    			return child.getLatestMove();
+    		}
+    	}
+    	return null;
     }
    
 }

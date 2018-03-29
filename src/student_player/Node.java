@@ -17,9 +17,7 @@ import tablut.TablutMove;
  */
 public class Node {
 	TablutBoardState state;
-    Node parent;
     List<Node> children;
-    int player;
     int winScore = 0;
     Move latestMove;
     
@@ -29,10 +27,8 @@ public class Node {
      * @param parent
      * @param state
      */
-    public Node(Node parent, TablutBoardState state, int player, Move move) {
+    public Node(Node parent, TablutBoardState state, Move move) {
     	this.state = state;
-    	this.parent = parent;
-    	this.player = player;
     	this.latestMove = move;
     }
     
@@ -45,13 +41,7 @@ public class Node {
     	for (TablutMove move : options) {
             TablutBoardState childState = (TablutBoardState) state.clone();
             childState.processMove(move);
-            int childPlayer = -1;
-            if (player == TablutBoardState.SWEDE) {
-            	childPlayer = TablutBoardState.MUSCOVITE;
-            } else {
-            	childPlayer = TablutBoardState.SWEDE;
-            }
-            Node childNode = new Node(this, childState, childPlayer, move);
+            Node childNode = new Node(this, childState, move);
             children.add(childNode);
         }
     }
@@ -65,14 +55,6 @@ public class Node {
     	return children;
     }
     
-    /**
-     * Retrieves the parent node.
-     * 
-     * @return
-     */
-    public Node getParent() {
-    	return parent;
-    }
     
     /**
      * Retrieves the state of the node.
