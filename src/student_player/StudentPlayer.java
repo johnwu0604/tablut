@@ -40,6 +40,7 @@ public class StudentPlayer extends TablutPlayer {
      */
     public Move chooseMove(TablutBoardState boardState) {
     	
+    	// set player and opponent ids
     	if (player_id == TablutBoardState.SWEDE) {
     		player = TablutBoardState.SWEDE;
     		opponent = TablutBoardState.MUSCOVITE;
@@ -73,6 +74,7 @@ public class StudentPlayer extends TablutPlayer {
     		return obviousMove;
     	}
     	
+    	// if obvious/greedy moves don't exist then run monte carlo simulation
     	long startTime = System.currentTimeMillis();
     	while ( (System.currentTimeMillis()-startTime) < MONTE_CARLO_LIMIT) {
     		for (Node child : children) {
@@ -83,10 +85,17 @@ public class StudentPlayer extends TablutPlayer {
     			}
     		}
         }
-        // Return your move to be processed by the server.
+    	
+        // return highest scoring move from monte carlo simulation
         return getHighestScore(children).getLatestMove();
     }
     
+    /**
+     * Retrieve the highest scoring Node out of all the children in random playout
+     * 
+     * @param children
+     * @return Node
+     */
     private Node getHighestScore(List<Node> children) {
     	Node highestScore = children.get(0);
     	for (Node child: children) {
@@ -97,6 +106,12 @@ public class StudentPlayer extends TablutPlayer {
     	return highestScore;
     }
     
+    /**
+     * Select the most promising child node based on heuristic
+     * 
+     * @param rootNode
+     * @return Node
+     */
     private Node selectPromisingNode(Node rootNode) {
     	Node node = rootNode;
     	node.createChildNodes();
@@ -111,8 +126,15 @@ public class StudentPlayer extends TablutPlayer {
     	return bestNode;
     }
     
+    /**
+     * Calculate heuristic based on state of the board
+     * 
+     * @param child
+     * @return int - heuristic calculation
+     */
     private int calculateHeuristic(Node child) {
     	TablutBoardState state = child.getState();
+    	// trivial heuristic
     	if (state.gameOver()) {
     		if (state.getWinner() == player) {
     			return 10000;
@@ -121,28 +143,37 @@ public class StudentPlayer extends TablutPlayer {
     			return 0;
     		}
     	}
+    	// start with initial score of 1000
     	int score = 1000;
-    	//int score = greedyHeuristic(child);
-    	if (score == 0) {
-    		return 0;
-    	}
+    	// get the king position
     	Coord king = state.getKingPosition(); 
+    	// gain points for remaining pieces, lose points for opponents remaining pieces
     	HashSet<Coord> playerPieces = state.getPlayerPieceCoordinates();
     	HashSet<Coord> opponentPieces = state.getOpponentPieceCoordinates();
-    	score += playerPieces.size();
-    	score -= opponentPieces.size();
+    	score += NUM_PIECES_WEIGHTING * playerPieces.size();
+    	score -= NUM_PIECES_WEIGHTING * opponentPieces.size();
+    	// gain points for pieces being close to king, lose points for opponent being close to king
+    	for (Coord coord: state.getPlayerPieceCoordinates()) {
+			score -= PIECES_TO_KING_WEIGHTING * coord.distance(king);
+		}
+		for (Coord coord: state.getOpponentPieceCoordinates()) {
+			score += PIECES_TO_KING_WEIGHTING * coord.distance(king);
+		}
+		// gain/lose points for king being close to corner
     	if (player == TablutBoardState.SWEDE) {
     		score -= KING_DISTANCE_WEIGHTING * Coordinates.distanceToClosestCorner(king);
+
     	} else {
     		score += KING_DISTANCE_WEIGHTING * Coordinates.distanceToClosestCorner(king);
     	}
     	return score;
     }
     
-    private void expandNode(Node node) {
-        node.createChildNodes();
-    }
-    
+    /**
+     * Simulate a random play out until game ends
+     * @param state
+     * @return TablutBoardState - ending state of the game
+     */
     private TablutBoardState simulateRandomPlayout(TablutBoardState state) {
     	TablutBoardState tempState = (TablutBoardState) state.clone();
         if (tempState.gameOver()) {
@@ -157,36 +188,11 @@ public class StudentPlayer extends TablutPlayer {
     }
     
     /**
-     * Determines the baseline heuristic purely based on greed
-     * 
-     * @return A heuristic based on how severe it is
-     */
-    private int greedyHeuristic(Node node) {
-    	node.createChildNodes();
-    	List<Node> children = node.getChildren();
-    	int previousNumPieces = node.getState().getNumberPlayerPieces(player);
-    	for (Node child: children) {
-			TablutBoardState state = child.getState();
-			int newNumPieces = child.getState().getNumberPlayerPieces(player);
-			if (state.gameOver()) {
-    			if (state.getWinner() == opponent) {
-    				return 0;
-    			}
-    		} else {
-    			if (previousNumPieces-newNumPieces == 0) {
-    				return 1000;
-    			}
-    		}
-		}
-    	return 100;
-    }
-    
-    /**
      * Returns the move that leads to a capture if it exists
      * 
      * @param children
      * @param parent
-     * @return
+     * @return Move - or null if it doesn't exist
      */
     private Move getObviousMove(List<Node> children, Node parent) {
     	int previousOpponentPieces = parent.getState().getNumberPlayerPieces(opponent);
@@ -204,7 +210,7 @@ public class StudentPlayer extends TablutPlayer {
      * 
      * @param children
      * @param parent
-     * @return
+     * @return Move - or null if it doesn't exist
      */
     private Move getWinningMove(List<Node> children) {
     	for (Node child: children) {
@@ -221,7 +227,7 @@ public class StudentPlayer extends TablutPlayer {
      * or moving closer to king if on defense
      * 
      * @param children
-     * @return
+     * @return Move - or null if it doesn't exist
      */
     private Move getGreedyMove(Node parent) {
     	Move bestMove = null;
@@ -242,10 +248,10 @@ public class StudentPlayer extends TablutPlayer {
     }
     
     /**
-     * Determines if a state is safe for at least one turn
+     * Determines if a state is safe for at least one turn cycle
      * 
      * @param parent
-     * @return
+     * @return boolean 
      */
     private boolean isMoveSafe(TablutBoardState state) {
     	int originalNumPieces = state.getNumberPlayerPieces(player);
